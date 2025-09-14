@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 
-// Define the expected types for your Cloudflare data
+// Define the expected types for your mock data
 interface ZoneMetric {
   zoneName: string;
   requests: number;
@@ -17,42 +17,45 @@ interface ReportData {
   };
 }
 
-// Main App Component with routing
+// Helper function to format bytes into a human-readable string
+const formatBytes = (bytes: number) => {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
+
+// Mock data to display after login
+const MOCK_REPORT_DATA: ReportData = {
+  report: [
+    { zoneName: 'example.com', requests: 12345678, bandwidth: 524288000 },
+    { zoneName: 'blog.example.com', requests: 567890, bandwidth: 10485760 },
+    { zoneName: 'api.example.com', requests: 9876543, bandwidth: 2621440000 },
+  ],
+  totals: {
+    requests: 22841021,
+    bandwidth: 3156224000,
+  },
+};
+
+// Main App Component
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [token, setToken] = useState<string | null>(null);
-  const [selectedZone, setSelectedZone] = useState<ZoneMetric | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    // Check for a saved token on page load
-    const savedToken = localStorage.getItem('auth_token');
-    if (savedToken) {
-      setToken(savedToken);
-      setIsLoggedIn(true);
-    }
-  }, []);
-
-  const handleLogin = (authToken: string) => {
-    localStorage.setItem('auth_token', authToken);
-    setToken(authToken);
-    setIsLoggedIn(true);
+  
+  const handleLogin = (isAuthenticated: boolean) => {
+    setIsLoggedIn(isAuthenticated);
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('auth_token');
-    setToken(null);
     setIsLoggedIn(false);
   };
 
-  const handleZoneClick = (zone: ZoneMetric) => {
-    setSelectedZone(zone);
-  };
-  
-  const handleBackToAllZones = () => {
-    setSelectedZone(null);
-  };
-  
+  // Conditionally render based on login status
+  if (!isLoggedIn) {
+    return <LoginPage onLogin={handleLogin} />;
+  }
+
   return (
     <div className="min-h-screen bg-orange-500">
       <style>{`
@@ -62,203 +65,116 @@ export default function App() {
           background-color: #f97316; /* Base orange color */
         }
       `}</style>
-      {isLoggedIn ? (
-        <Dashboard
-          token={token}
-          onLogout={handleLogout}
-          selectedZone={selectedZone}
-          onZoneClick={handleZoneClick}
-          onBackToAllZones={handleBackToAllZones}
-        />
-      ) : (
-        <Login onLogin={handleLogin} />
-      )}
+      <div className="max-w-4xl px-4 py-8 mx-auto">
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-3xl font-bold text-white">Cloudflare Analytics (Mock)</h1>
+          <button
+            onClick={handleLogout}
+            className="px-4 py-2 text-sm font-semibold text-orange-600 transition-colors duration-200 bg-white rounded-md shadow-sm hover:bg-gray-100"
+          >
+            Log Out
+          </button>
+        </div>
+
+        <div className="p-6 mb-8 bg-white rounded-lg shadow-lg">
+          <h2 className="mb-4 text-xl font-bold text-orange-600">Total Account Usage</h2>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="p-4 rounded-md bg-orange-100">
+              <h3 className="text-sm font-semibold text-gray-800">Total Requests</h3>
+              <p className="text-2xl font-bold text-orange-800">{MOCK_REPORT_DATA.totals.requests.toLocaleString()}</p>
+            </div>
+            <div className="p-4 rounded-md bg-orange-100">
+              <h3 className="text-sm font-semibold text-gray-800">Total Data Transfer</h3>
+              <p className="text-2xl font-bold text-orange-800">{formatBytes(MOCK_REPORT_DATA.totals.bandwidth)}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-6 bg-white rounded-lg shadow-lg">
+          <h2 className="mb-4 text-xl font-bold text-orange-600">Zone-specific Reports</h2>
+          {MOCK_REPORT_DATA.report.length > 0 ? (
+            MOCK_REPORT_DATA.report.map((zone) => (
+              <div key={zone.zoneName} className="p-4 mb-4 border rounded-md bg-orange-50 border-orange-200">
+                <h3 className="text-lg font-semibold text-orange-700">{zone.zoneName}</h3>
+                <div className="grid grid-cols-1 gap-4 mt-2 md:grid-cols-2">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-600">Requests:</p>
+                    <p className="text-xl font-bold text-orange-800">{zone.requests.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-600">Bandwidth:</p>
+                    <p className="text-xl font-bold text-orange-800">{formatBytes(zone.bandwidth)}</p>
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <p className="text-gray-500">No report data available.</p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
 
-// Login Component
-const Login = ({ onLogin }: { onLogin: (token: string) => void }) => {
+// Separate component for the login page
+function LoginPage({ onLogin }: { onLogin: (isAuthenticated: boolean) => void }) {
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [email, setEmail] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-
-    try {
-      const response = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await response.json();
-
-      if (response.ok) {
-        onLogin(data.token);
-      }
-    } catch (error) {
-      console.error('Login failed:', error);
-    } finally {
-      setLoading(false);
+    if (username === 'user' && password === 'password') {
+      onLogin(true);
+      setErrorMessage('');
+    } else {
+      setErrorMessage('Invalid username or password.');
     }
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-orange-600">
-      <div className="w-full max-w-sm p-8 bg-white rounded-lg shadow-lg">
-        <h2 className="mb-6 text-2xl font-bold text-center text-orange-600">TheView Login</h2>
+    <div className="flex items-center justify-center min-h-screen bg-orange-50">
+      <div className="p-8 bg-white rounded-lg shadow-xl w-96">
+        <h1 className="mb-6 text-2xl font-bold text-center text-orange-600">Log In to Cloudflare</h1>
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label className="block mb-2 text-sm font-semibold text-gray-700">Email</label>
+            <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+              Username
+            </label>
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
-              required
+              id="username"
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="block w-full px-3 py-2 mt-1 border rounded-md shadow-sm border-gray-300 focus:outline-none focus:ring-orange-500 focus:border-orange-500"
+              placeholder="user"
             />
           </div>
           <div className="mb-6">
-            <label className="block mb-2 text-sm font-semibold text-gray-700">Password</label>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+              Password
+            </label>
             <input
+              id="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
-              required
+              className="block w-full px-3 py-2 mt-1 border rounded-md shadow-sm border-gray-300 focus:outline-none focus:ring-orange-500 focus:border-orange-500"
+              placeholder="password"
             />
           </div>
+          {errorMessage && (
+            <p className="mb-4 text-sm text-center text-red-500">{errorMessage}</p>
+          )}
           <button
             type="submit"
-            disabled={loading}
-            className="w-full px-4 py-2 text-white font-semibold bg-orange-500 rounded-md hover:bg-orange-600 transition-colors duration-200"
+            className="w-full px-4 py-2 font-semibold text-white transition-colors duration-200 bg-orange-600 rounded-md shadow-sm hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500"
           >
-            {loading ? 'Logging in...' : 'Log In'}
+            Log In
           </button>
         </form>
       </div>
     </div>
   );
-};
-
-// Dashboard Component
-const Dashboard = ({ token, onLogout, selectedZone, onZoneClick, onBackToAllZones }: { token: string | null; onLogout: () => void; selectedZone: ZoneMetric | null; onZoneClick: (zone: ZoneMetric) => void; onBackToAllZones: () => void; }) => {
-  const [report, setReport] = useState<ReportData | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const formatBytes = (bytes: number, decimals = 2) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const dm = decimals < 0 ? 0 : decimals;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
-  };
-
-  useEffect(() => {
-    const fetchReport = async () => {
-      if (!token) {
-        setLoading(false);
-        return;
-      }
-      try {
-        const response = await fetch('/api/report', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const data = await response.json();
-        if (response.ok) {
-          setReport(data);
-        } else {
-          console.error('Failed to fetch report:', data.error);
-        }
-      } catch (error) {
-        console.error('Network error. Could not load data:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchReport();
-  }, [token]);
-
-  if (loading) return (
-    <div className="flex flex-col items-center justify-center min-h-screen text-white">
-      <h2 className="text-xl font-bold">Loading Cloudflare Data...</h2>
-    </div>
-  );
-
-  if (selectedZone) {
-    return (
-      <div className="p-8">
-        <div className="flex items-center justify-between mb-8">
-          <button onClick={onBackToAllZones} className="px-4 py-2 text-sm text-white font-semibold bg-orange-700 rounded-md hover:bg-orange-800 transition-colors duration-200">
-            ← Back to all Domains
-          </button>
-          <button onClick={onLogout} className="px-4 py-2 text-sm text-white font-semibold bg-orange-700 rounded-md hover:bg-orange-800 transition-colors duration-200">
-            Log Out
-          </button>
-        </div>
-        <div className="p-6 mb-8 bg-white rounded-lg shadow-lg">
-          <h2 className="mb-4 text-2xl font-bold text-orange-600">Detailed Report for {selectedZone.zoneName}</h2>
-          <p className="mb-4 text-sm text-gray-600">Data for the last 30 days</p>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="p-4 rounded-md bg-orange-100">
-              <h3 className="text-sm font-semibold text-gray-800">Total Requests</h3>
-              <p className="text-2xl font-bold text-orange-800">{selectedZone.requests.toLocaleString()}</p>
-            </div>
-            <div className="p-4 rounded-md bg-orange-100">
-              <h3 className="text-sm font-semibold text-gray-800">Total Data Transfer</h3>
-              <p className="text-2xl font-bold text-orange-800">{formatBytes(selectedZone.bandwidth)}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold text-white">TheView Dashboard</h1>
-        <button onClick={onLogout} className="px-4 py-2 text-sm text-white font-semibold bg-orange-700 rounded-md hover:bg-orange-800 transition-colors duration-200">
-          Log Out
-        </button>
-      </div>
-
-      <div className="p-6 mb-8 bg-white rounded-lg shadow-lg">
-        <h2 className="mb-4 text-xl font-bold text-orange-600">Total Account Usage</h2>
-        <p className="mb-4 text-sm text-gray-600">Data for the last 30 days</p>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div className="p-4 rounded-md bg-orange-100">
-            <h3 className="text-sm font-semibold text-gray-800">Total Requests</h3>
-            <p className="text-2xl font-bold text-orange-800">{report?.totals.requests.toLocaleString()}</p>
-          </div>
-          <div className="p-4 rounded-md bg-orange-100">
-            <h3 className="text-sm font-semibold text-gray-800">Total Data Transfer</h3>
-            <p className="text-2xl font-bold text-orange-800">{formatBytes(report?.totals.bandwidth)}</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="p-6 bg-white rounded-lg shadow-lg">
-        <h2 className="mb-4 text-xl font-bold text-orange-600">Zone-specific Reports</h2>
-        {report?.report && report.report.length > 0 ? (
-          report.report.map((zone) => (
-            <div
-              key={zone.zoneName}
-              onClick={() => onZoneClick(zone)}
-              className="p-4 mb-4 border rounded-md cursor-pointer bg-orange-50 border-orange-200 hover:bg-orange-100 transition-colors duration-200"
-            >
-              <h3 className="text-lg font-semibold text-orange-700">🌐 {zone.zoneName}</h3>
-              <p className="text-sm text-gray-700">Total Requests: {zone.requests.toLocaleString()}</p>
-              <p className="text-sm text-gray-700">Total Data Transfer: {formatBytes(zone.bandwidth)}</p>
-            </div>
-          ))
-        ) : (
-          <p className="text-gray-500">No domains found or no data available for the last 30 days.</p>
-        )}
-      </div>
-    </div>
-  );
-};
+}
