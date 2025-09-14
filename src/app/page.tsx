@@ -1,88 +1,264 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { useState, useEffect } from 'react';
+
+// Define the expected types for your Cloudflare data
+interface ZoneMetric {
+  zoneName: string;
+  requests: number;
+  bandwidth: number;
+}
+
+interface ReportData {
+  report: ZoneMetric[];
+  totals: {
+    requests: number;
+    bandwidth: number;
+  };
+}
+
+// Main App Component with routing
+export default function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
+  const [selectedZone, setSelectedZone] = useState<ZoneMetric | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Check for a saved token on page load
+    const savedToken = localStorage.getItem('auth_token');
+    if (savedToken) {
+      setToken(savedToken);
+      setIsLoggedIn(true);
+    }
+  }, []);
+
+  const handleLogin = (authToken: string) => {
+    localStorage.setItem('auth_token', authToken);
+    setToken(authToken);
+    setIsLoggedIn(true);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('auth_token');
+    setToken(null);
+    setIsLoggedIn(false);
+  };
+
+  const handleZoneClick = (zone: ZoneMetric) => {
+    setSelectedZone(zone);
+  };
+  
+  const handleBackToAllZones = () => {
+    setSelectedZone(null);
+  };
+  
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
+    <div className="min-h-screen bg-orange-500">
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+          font-family: 'Inter', sans-serif;
+          background-color: #f97316; /* Base orange color */
+        }
+      `}</style>
+      {isLoggedIn ? (
+        <Dashboard
+          token={token}
+          onLogout={handleLogout}
+          selectedZone={selectedZone}
+          onZoneClick={handleZoneClick}
+          onBackToAllZones={handleBackToAllZones}
         />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      ) : (
+        <Login onLogin={handleLogin} />
+      )}
     </div>
   );
 }
+
+// Login Component
+const Login = ({ onLogin }: { onLogin: (token: string) => void }) => {
+  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const response = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await response.json();
+
+      if (response.ok) {
+        onLogin(data.token);
+      }
+    } catch (error) {
+      console.error('Login failed:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-orange-600">
+      <div className="w-full max-w-sm p-8 bg-white rounded-lg shadow-lg">
+        <h2 className="mb-6 text-2xl font-bold text-center text-orange-600">TheView Login</h2>
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <label className="block mb-2 text-sm font-semibold text-gray-700">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-4 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+              required
+            />
+          </div>
+          <div className="mb-6">
+            <label className="block mb-2 text-sm font-semibold text-gray-700">Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-4 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+              required
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full px-4 py-2 text-white font-semibold bg-orange-500 rounded-md hover:bg-orange-600 transition-colors duration-200"
+          >
+            {loading ? 'Logging in...' : 'Log In'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// Dashboard Component
+const Dashboard = ({ token, onLogout, selectedZone, onZoneClick, onBackToAllZones }: { token: string | null; onLogout: () => void; selectedZone: ZoneMetric | null; onZoneClick: (zone: ZoneMetric) => void; onBackToAllZones: () => void; }) => {
+  const [report, setReport] = useState<ReportData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const formatBytes = (bytes: number, decimals = 2) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+  };
+
+  useEffect(() => {
+    const fetchReport = async () => {
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const response = await fetch('/api/report', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await response.json();
+        if (response.ok) {
+          setReport(data);
+        } else {
+          console.error('Failed to fetch report:', data.error);
+        }
+      } catch (error) {
+        console.error('Network error. Could not load data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchReport();
+  }, [token]);
+
+  if (loading) return (
+    <div className="flex flex-col items-center justify-center min-h-screen text-white">
+      <h2 className="text-xl font-bold">Loading Cloudflare Data...</h2>
+    </div>
+  );
+
+  if (selectedZone) {
+    return (
+      <div className="p-8">
+        <div className="flex items-center justify-between mb-8">
+          <button onClick={onBackToAllZones} className="px-4 py-2 text-sm text-white font-semibold bg-orange-700 rounded-md hover:bg-orange-800 transition-colors duration-200">
+            ← Back to all Domains
+          </button>
+          <button onClick={onLogout} className="px-4 py-2 text-sm text-white font-semibold bg-orange-700 rounded-md hover:bg-orange-800 transition-colors duration-200">
+            Log Out
+          </button>
+        </div>
+        <div className="p-6 mb-8 bg-white rounded-lg shadow-lg">
+          <h2 className="mb-4 text-2xl font-bold text-orange-600">Detailed Report for {selectedZone.zoneName}</h2>
+          <p className="mb-4 text-sm text-gray-600">Data for the last 30 days</p>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="p-4 rounded-md bg-orange-100">
+              <h3 className="text-sm font-semibold text-gray-800">Total Requests</h3>
+              <p className="text-2xl font-bold text-orange-800">{selectedZone.requests.toLocaleString()}</p>
+            </div>
+            <div className="p-4 rounded-md bg-orange-100">
+              <h3 className="text-sm font-semibold text-gray-800">Total Data Transfer</h3>
+              <p className="text-2xl font-bold text-orange-800">{formatBytes(selectedZone.bandwidth)}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-8">
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-3xl font-bold text-white">TheView Dashboard</h1>
+        <button onClick={onLogout} className="px-4 py-2 text-sm text-white font-semibold bg-orange-700 rounded-md hover:bg-orange-800 transition-colors duration-200">
+          Log Out
+        </button>
+      </div>
+
+      <div className="p-6 mb-8 bg-white rounded-lg shadow-lg">
+        <h2 className="mb-4 text-xl font-bold text-orange-600">Total Account Usage</h2>
+        <p className="mb-4 text-sm text-gray-600">Data for the last 30 days</p>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="p-4 rounded-md bg-orange-100">
+            <h3 className="text-sm font-semibold text-gray-800">Total Requests</h3>
+            <p className="text-2xl font-bold text-orange-800">{report?.totals.requests.toLocaleString()}</p>
+          </div>
+          <div className="p-4 rounded-md bg-orange-100">
+            <h3 className="text-sm font-semibold text-gray-800">Total Data Transfer</h3>
+            <p className="text-2xl font-bold text-orange-800">{formatBytes(report?.totals.bandwidth)}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="p-6 bg-white rounded-lg shadow-lg">
+        <h2 className="mb-4 text-xl font-bold text-orange-600">Zone-specific Reports</h2>
+        {report?.report && report.report.length > 0 ? (
+          report.report.map((zone) => (
+            <div
+              key={zone.zoneName}
+              onClick={() => onZoneClick(zone)}
+              className="p-4 mb-4 border rounded-md cursor-pointer bg-orange-50 border-orange-200 hover:bg-orange-100 transition-colors duration-200"
+            >
+              <h3 className="text-lg font-semibold text-orange-700">🌐 {zone.zoneName}</h3>
+              <p className="text-sm text-gray-700">Total Requests: {zone.requests.toLocaleString()}</p>
+              <p className="text-sm text-gray-700">Total Data Transfer: {formatBytes(zone.bandwidth)}</p>
+            </div>
+          ))
+        ) : (
+          <p className="text-gray-500">No domains found or no data available for the last 30 days.</p>
+        )}
+      </div>
+    </div>
+  );
+};
