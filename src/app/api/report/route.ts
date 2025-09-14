@@ -2,98 +2,51 @@ import { NextResponse } from 'next/server';
 
 const AUTH_TOKEN = 'your_super_secret_auth_token';
 
-interface GraphQLGroup {
-  sum: {
-    requests: number;
-    bytes: number;
-  };
+// Define an interface for the Cloudflare API response to provide type safety
+interface CloudflareAPIResponse {
+  success: boolean;
+  errors?: any[];
+  result?: any;
 }
 
 // Cloudflare API functions
 async function getZoneMetrics(zoneId: string, apiToken: string) {
-  const last30Days = new Date();
-  last30Days.setDate(last30Days.getDate() - 30);
-  const sinceDate = last30Days.toISOString().split('T')[0];
-
-  const graphqlQuery = `
-    query getZoneMetrics($zoneTag: string, $sinceDate: string!) {
-      viewer {
-        zones(filter: {zoneTag: $zoneTag}) {
-          httpRequests1dGroups(
-            limit: 30,
-            filter: {date_gt: $sinceDate}
-          ) {
-            sum {
-              requests
-              bytes
-            }
-          }
-        }
-      }
-    }
-  `;
+  const url = `https://api.cloudflare.com/client/v4/zones/${zoneId}/analytics/dashboard?since=-720`; // Last 12 hours
+  const headers = { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' };
   
-  const headers = {
-    'Authorization': `Bearer ${apiToken}`,
-    'Content-Type': 'application/json'
-  };
-
   try {
-    const response = await fetch('https://api.cloudflare.com/client/v4/graphql', {
-      method: 'POST',
-      headers: headers,
-      body: JSON.stringify({
-        query: graphqlQuery,
-        variables: { 
-          zoneTag: zoneId,
-          sinceDate: sinceDate
-        }
-      })
-    });
-    
-    // Check if the response was successful before parsing
-    if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`API response failed: ${response.status} - ${response.statusText}`, errorText);
-        return null;
-    }
-
-    const data = await response.json();
-    if (data.errors) {
+    const response = await fetch(url, { headers });
+    const data: CloudflareAPIResponse = await response.json();
+    if (!data.success) {
       console.error(`Error fetching metrics for zone ${zoneId}:`, data.errors);
       return null;
     }
-    
-    const groups = data.data.viewer.zones[0].httpRequests1dGroups;
-    if (!groups || groups.length === 0) {
-      return { requests: 0, bandwidth: 0 };
+    const metrics = data.result.timeseries;
+    if (!metrics || metrics.length === 0) {
+      return { requests: 0, bandwidth: 0, cachedRequests: 0, cachedBandwidth: 0 };
     }
     
     let totalRequests = 0;
     let totalBandwidth = 0;
-    
-    groups.forEach((group: GraphQLGroup) => {
-      totalRequests += group.sum.requests;
-      totalBandwidth += group.sum.bytes;
+    metrics.forEach((timeSlot: any) => {
+      totalRequests += timeSlot.requests.all;
+      totalBandwidth += timeSlot.bandwidth.all;
     });
 
-    return { 
-      requests: totalRequests, 
-      bandwidth: totalBandwidth,
-    };
+    return { requests: totalRequests, bandwidth: totalBandwidth };
   } catch (error) {
     console.error(`Fetch failed for zone ${zoneId}:`, error);
     return null;
   }
 }
 
-async function getZones(apiToken: string) {
-  const url = `https://api.cloudflare.com/client/v4/zones?per_page=50`;
+async function getZones(accountId: string, apiToken: string) {
+  const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/zones?status=active`;
   const headers = { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' };
-  
+
   try {
     const response = await fetch(url, { headers });
-    const data = await response.json();
+    const data: CloudflareAPIResponse = await response.json();
     if (!data.success) {
       console.error('Error fetching zones:', data.errors);
       return [];
@@ -113,12 +66,13 @@ export async function GET(request: Request) {
   }
 
   const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
 
-  if (!apiToken) {
-    return NextResponse.json({ error: 'API token not set.' }, { status: 500 });
+  if (!apiToken || !accountId) {
+    return NextResponse.json({ error: 'API token or account ID not set.' }, { status: 500 });
   }
 
-  const zones = await getZones(apiToken);
+  const zones = await getZones(accountId, apiToken);
   if (zones.length === 0) {
     return NextResponse.json({ error: 'No zones found or error fetching zones.' }, { status: 500 });
   }
@@ -141,11 +95,10 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json({
-    zones: zones.map(zone => ({ id: zone.id, name: zone.name })),
-    report,
+    report: report,
     totals: {
       requests: totalRequests,
       bandwidth: totalBandwidth,
-    }
+    },
   });
 }
