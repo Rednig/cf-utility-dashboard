@@ -95,7 +95,7 @@ const Login = ({ onLogin }: { onLogin: (token: string) => void }) => {
   return (
     <div className="flex items-center justify-center min-h-screen bg-orange-600">
       <div className="w-full max-w-sm p-8 bg-white rounded-lg shadow-lg">
-        <h2 className="mb-6 text-2xl font-bold text-center text-orange-600">TheView Login</h2>
+        <h2 className="mb-6 text-2xl font-bold text-center text-orange-600">The View Login</h2>
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
             <label className="block mb-2 text-sm font-semibold text-gray-700">Email</label>
@@ -174,7 +174,7 @@ const Dashboard = ({ token, onLogout }: { token: string; onLogout: () => void })
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold text-white">TheView Dashboard</h1>
+        <h1 className="text-3xl font-bold text-white">The View Dashboard</h1>
         <button onClick={onLogout} className="px-4 py-2 text-sm text-white font-semibold bg-orange-700 rounded-md hover:bg-orange-800 transition-colors duration-200">
           Log Out
         </button>
