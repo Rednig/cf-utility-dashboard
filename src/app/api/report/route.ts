@@ -2,11 +2,24 @@ import { NextResponse } from 'next/server';
 
 const AUTH_TOKEN = 'your_super_secret_auth_token';
 
-// Define an interface for the Cloudflare API response to provide type safety
-interface CloudflareAPIResponse {
+// Define specific interfaces for the Cloudflare API response
+interface CloudflareZoneMetric {
+  timeseries: {
+    requests: { all: number };
+    bandwidth: { all: number };
+  }[];
+}
+
+interface CloudflareAPIResponse<T> {
   success: boolean;
-  errors?: any[];
-  result?: any;
+  errors?: { message: string }[];
+  result?: T;
+}
+
+interface CloudflareZone {
+  id: string;
+  name: string;
+  status: string;
 }
 
 // Cloudflare API functions
@@ -16,19 +29,19 @@ async function getZoneMetrics(zoneId: string, apiToken: string) {
   
   try {
     const response = await fetch(url, { headers });
-    const data: CloudflareAPIResponse = await response.json();
+    const data: CloudflareAPIResponse<CloudflareZoneMetric> = await response.json();
     if (!data.success) {
       console.error(`Error fetching metrics for zone ${zoneId}:`, data.errors);
       return null;
     }
-    const metrics = data.result.timeseries;
+    const metrics = data.result?.timeseries;
     if (!metrics || metrics.length === 0) {
       return { requests: 0, bandwidth: 0, cachedRequests: 0, cachedBandwidth: 0 };
     }
     
     let totalRequests = 0;
     let totalBandwidth = 0;
-    metrics.forEach((timeSlot: any) => {
+    metrics.forEach((timeSlot) => {
       totalRequests += timeSlot.requests.all;
       totalBandwidth += timeSlot.bandwidth.all;
     });
@@ -46,12 +59,12 @@ async function getZones(accountId: string, apiToken: string) {
 
   try {
     const response = await fetch(url, { headers });
-    const data: CloudflareAPIResponse = await response.json();
+    const data: CloudflareAPIResponse<CloudflareZone[]> = await response.json();
     if (!data.success) {
       console.error('Error fetching zones:', data.errors);
       return [];
     }
-    return data.result;
+    return data.result || [];
   } catch (error) {
     console.error('Fetch failed for zones:', error);
     return [];
